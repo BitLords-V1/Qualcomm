@@ -143,8 +143,8 @@ from ocr_qnn import OCREngine
 
 # Initialize with separate models
 engine = OCREngine(
-    detector_path="models/easyocr_detector/model.onnx",
-    recognizer_path="models/easyocr_recognizer/model.onnx"
+    detector_path="../models/easyocr_detector/model.onnx",
+    recognizer_path="../models/easyocr_recognizer/model.onnx"
 )
 
 # Check if ready

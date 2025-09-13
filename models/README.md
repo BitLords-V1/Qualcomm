@@ -5,7 +5,7 @@ This directory contains the ONNX models required for iLumina to function.
 ## Required Models
 
 ### 1. EasyOCR ONNX Model
-- **File**: `easyocr_qnn.onnx`
+- **File**: `easyocr/easyocr_qnn.onnx`
 - **Source**: [Qualcomm AI Hub](https://aihub.qualcomm.com)
 - **Purpose**: Text extraction from images using OCR
 - **Target**: Qualcomm NPU (QNN Execution Provider)

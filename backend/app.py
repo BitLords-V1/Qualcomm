@@ -42,8 +42,8 @@ def initialize_engines():
     try:
         logger.info("Initializing OCR engine with QNN...")
         ocr_engine = OCREngine(
-            detector_path="models/easyocr_detector/model.onnx",
-            recognizer_path="models/easyocr_recognizer/model.onnx"
+            detector_path="../models/easyocr_detector/model.onnx",
+            recognizer_path="../models/easyocr_recognizer/model.onnx"
         )
         if ocr_engine.is_ready():
             engines_initialized += 1
@@ -57,7 +57,10 @@ def initialize_engines():
     
     try:
         logger.info("Initializing Whisper engine with QNN...")
-        whisper_engine = WhisperEngine()
+        whisper_engine = WhisperEngine(
+            encoder_path="../models/whisper_encoder/model.onnx",
+            decoder_path="../models/whisper_decoder/model.onnx"
+        )
         if whisper_engine.is_ready():
             engines_initialized += 1
             logger.info("✓ Whisper engine initialized successfully")
