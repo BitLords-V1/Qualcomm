@@ -20,18 +20,18 @@ class ILuminaApp {
     async createWindow() {
         // Create the browser window
         this.mainWindow = new BrowserWindow({
-            width: 1920,
-            height: 1080,
-            fullscreen: true,
+            width: 1200,
+            height: 800,
+            // fullscreen: true,
             webPreferences: {
                 nodeIntegration: true,
                 contextIsolation: false,
                 enableRemoteModule: true
             },
-            icon: path.join(__dirname, 'assets', 'icon.png'),
-            show: false,
-            titleBarStyle: 'hidden',
-            frame: false
+            // icon: path.join(__dirname, 'assets', 'icon.png'),
+            show: true,
+            // titleBarStyle: 'hidden',
+            // frame: false
         });
 
         // Load the app

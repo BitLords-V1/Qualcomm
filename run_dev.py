@@ -40,6 +40,14 @@ class ILuminaDevRunner:
             
             if self.backend_process.poll() is None:
                 print("✅ Backend started successfully")
+
+                def read_stream(stream, prefix):
+                    for line in stream:
+                        print(f"[Backend {prefix}]: {line.strip()}")
+
+                threading.Thread(target=read_stream, args=(self.backend_process.stdout, "stdout"), daemon=True).start()
+                threading.Thread(target=read_stream, args=(self.backend_process.stderr, "stderr"), daemon=True).start()
+
                 return True
             else:
                 print("❌ Backend failed to start")
