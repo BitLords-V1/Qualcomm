@@ -2,7 +2,7 @@ import io, base64
 from flask import Flask, request, jsonify
 from PIL import Image
 from tts import TTS
-from stt_whisper_pair import WhisperPairTiny
+from sst_whisper_pair import WhisperPairTiny
 
 from ocr_pipeline import ocr_easy   # swap to a hybrid later if you add TrOCR
 

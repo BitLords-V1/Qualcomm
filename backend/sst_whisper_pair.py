@@ -4,7 +4,7 @@ import io, json
 import numpy as np
 import soundfile as sf
 from tokenizers import Tokenizer
-from .qnn_runtime import make_qnn_session
+from qnn_runtime import make_qnn_session
 
 # ---------- audio -> log-mel (Whisper settings) ----------
 def log_mel_spectrogram(wav: np.ndarray, sr: int = 16000,

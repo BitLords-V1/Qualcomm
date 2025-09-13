@@ -1,0 +1,8 @@
+onnxruntime-qnn==1.18.0
+flask>=3
+numpy
+pillow
+pyttsx3
+soundfile
+tokenizers>=0.15
+scipy>=1.11 
