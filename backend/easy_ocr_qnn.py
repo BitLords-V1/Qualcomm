@@ -142,7 +142,7 @@ class OCREngine:
             image_tensor: Preprocessed image tensor
             
         Returns:
-            Detected text regions (bounding boxes)
+            List of bounding boxes for detected text regions
         """
         try:
             # Run detector inference
@@ -181,7 +181,6 @@ class OCREngine:
             
             for region in cropped_regions:
                 # Preprocess the cropped region for recognition
-                # This would typically involve resizing to recognizer input size
                 region_tensor = self.preprocess_region_for_recognition(region)
                 
                 # Run recognizer inference
@@ -190,11 +189,48 @@ class OCREngine:
                     {self.recognizer_input_name: region_tensor}
                 )
                 
-                # For now, return dummy text
-                # In a real implementation, you would decode the recognizer outputs
-                # to extract actual text using the model's vocabulary
-                dummy_text = f"Sample text region {len(recognized_texts) + 1}"
-                recognized_texts.append(dummy_text)
+                # DECODE: Convert model outputs to actual text
+                if recognizer_outputs and len(recognizer_outputs) > 0:
+                    raw_output = recognizer_outputs[0]  # Shape: (1, 249, 97)
+                    
+                    # Get the most likely character for each position
+                    predicted_chars = np.argmax(raw_output[0], axis=1)  # Shape: (249,)
+                    
+                    # EasyOCR character mapping (simplified version)
+                    # This includes common characters, digits, and symbols
+                    char_list = [
+                        '', # 0: blank/padding
+                        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',  # 1-10: digits
+                        'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',  # 11-23: uppercase
+                        'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',  # 24-36: uppercase
+                        'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',  # 37-49: lowercase
+                        'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',  # 50-62: lowercase
+                        ' ', '.', ',', '!', '?', ':', ';', "'", '"', '-', '_', '(', ')',     # 63-75: punctuation
+                        '[', ']', '{', '}', '@', '#', '$', '%', '&', '*', '+', '=', '/',    # 76-88: symbols
+                        '\\', '|', '<', '>', '~', '`', '^'  # 89-95: more symbols
+                    ]
+                    
+                    # Extend character list to 97 if needed
+                    while len(char_list) < 97:
+                        char_list.append('?')  # Unknown character placeholder
+                    
+                    # Convert indices to characters using CTC decoding
+                    decoded_chars = []
+                    prev_char = 0
+                    for char_idx in predicted_chars:
+                        char_idx = int(char_idx)
+                        if char_idx != 0 and char_idx != prev_char:  # Remove blanks and duplicates
+                            if 0 <= char_idx < len(char_list):
+                                decoded_chars.append(char_list[char_idx])
+                        prev_char = char_idx
+                    
+                    decoded_text = ''.join(decoded_chars).strip()
+                    if not decoded_text:
+                        decoded_text = "[Text detected but unclear]"
+                else:
+                    decoded_text = "No output from recognizer"
+                    
+                recognized_texts.append(decoded_text)
             
             return recognized_texts
             
@@ -212,8 +248,8 @@ class OCREngine:
         Returns:
             Preprocessed tensor for recognition
         """
-        # Resize to recognizer input size (typically rectangular, e.g., 100x32)
-        target_size = (1000, 64)  # Width x Height for text recognition (model expects 64x1000)  # Width x Height for text recognition
+        # Resize to recognizer input size (model expects 64x1000)
+        target_size = (1000, 64)  # Width x Height for text recognition (model expects 64x1000)
         region_resized = cv2.resize(region, target_size)
         
         # Convert to grayscale if needed
@@ -238,7 +274,7 @@ class OCREngine:
             image: OpenCV image (BGR format)
             
         Returns:
-            Dictionary with extracted text, confidence, and metadata
+            Dictionary with extracted text and metadata
         """
         try:
             start_time = time.time()
@@ -304,8 +340,6 @@ class OCREngine:
         return {
             'detector_path': self.detector_path,
             'recognizer_path': self.recognizer_path,
-            'detector_providers': self.detector_session.get_providers(),
-            'recognizer_providers': self.recognizer_session.get_providers(),
             'npu_available': self.npu_available,
-            'architecture': 'EasyOCR Detector-Recognizer'
+            'architecture': 'EasyOCR Detector + Recognizer'
         }
