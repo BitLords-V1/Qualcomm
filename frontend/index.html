@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>iLumina - Offline Exam Helper</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-content">
+                <div class="app-title">
+                    <h1>iLumina</h1>
+                    <span class="subtitle">Offline Exam Helper</span>
+                </div>
+                <div class="status-indicators">
+                    <div class="status-item" id="offline-status">
+                        <div class="status-dot offline"></div>
+                        <span>Offline Mode</span>
+                    </div>
+                    <div class="status-item" id="npu-status">
+                        <div class="status-dot" id="npu-dot"></div>
+                        <span id="npu-text">NPU Status</span>
+                    </div>
+                    <div class="status-item" id="backend-status">
+                        <div class="status-dot" id="backend-dot"></div>
+                        <span id="backend-text">Backend</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Camera Section -->
+            <section class="camera-section">
+                <div class="camera-container">
+                    <video id="webcam" autoplay muted playsinline></video>
+                    <div class="camera-overlay">
+                        <div class="camera-controls">
+                            <button id="capture-btn" class="btn btn-primary">
+                                <span class="btn-icon">📷</span>
+                                OCR & Read
+                            </button>
+                            <button id="start-recording" class="btn btn-secondary">
+                                <span class="btn-icon">🎤</span>
+                                Start Voice
+                            </button>
+                            <button id="stop-recording" class="btn btn-danger" disabled>
+                                <span class="btn-icon">⏹️</span>
+                                Stop Voice
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Text Display Section -->
+            <section class="text-section">
+                <div class="text-container">
+                    <div class="text-header">
+                        <h3>Extracted Text</h3>
+                        <div class="text-actions">
+                            <button id="repeat-btn" class="btn btn-small">
+                                <span class="btn-icon">🔄</span>
+                                Repeat
+                            </button>
+                            <button id="slower-btn" class="btn btn-small">
+                                <span class="btn-icon">🐌</span>
+                                Slower
+                            </button>
+                            <button id="faster-btn" class="btn btn-small">
+                                <span class="btn-icon">⚡</span>
+                                Faster
+                            </button>
+                            <button id="spell-btn" class="btn btn-small">
+                                <span class="btn-icon">🔤</span>
+                                Spell
+                            </button>
+                        </div>
+                    </div>
+                    <div class="text-display" id="text-display">
+                        <p class="placeholder">Text will appear here after OCR capture...</p>
+                    </div>
+                    <div class="text-metadata" id="text-metadata">
+                        <!-- OCR metadata will be displayed here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Voice Commands Section -->
+            <section class="voice-section">
+                <div class="voice-container">
+                    <h3>Voice Commands</h3>
+                    <div class="voice-commands">
+                        <div class="command-item">
+                            <span class="command">"Repeat"</span>
+                            <span class="description">Read the text again</span>
+                        </div>
+                        <div class="command-item">
+                            <span class="command">"Slower"</span>
+                            <span class="description">Speak more slowly</span>
+                        </div>
+                        <div class="command-item">
+                            <span class="command">"Faster"</span>
+                            <span class="description">Speak more quickly</span>
+                        </div>
+                        <div class="command-item">
+                            <span class="command">"Spell"</span>
+                            <span class="description">Spell the text letter by letter</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Loading Overlay -->
+        <div class="loading-overlay" id="loading-overlay">
+            <div class="loading-content">
+                <div class="loading-spinner"></div>
+                <p id="loading-text">Processing...</p>
+            </div>
+        </div>
+
+        <!-- Notification Toast -->
+        <div class="toast" id="toast">
+            <div class="toast-content">
+                <span class="toast-icon">ℹ️</span>
+                <span class="toast-message" id="toast-message">Notification</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>

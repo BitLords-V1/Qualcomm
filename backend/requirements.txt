@@ -1,0 +1,10 @@
+flask==2.3.3
+flask-cors==4.0.0
+onnxruntime==1.22.1
+opencv-python==4.8.1.78
+numpy==1.26.4
+Pillow==10.0.1
+pyttsx3==2.90
+pyaudio==0.2.14
+wave==0.0.2
+pyinstaller==6.0.0
