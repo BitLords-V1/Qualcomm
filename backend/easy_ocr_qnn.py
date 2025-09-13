@@ -121,16 +121,16 @@ class OCREngine:
         else:
             image_rgb = image
         
-        # Resize to standard input size (this may need adjustment based on your model)
-        # Common EasyOCR input sizes: 640x640, 512x512, etc.
-        target_size = (640, 640)
+        # Resize to model's expected input size: 608x800
+        target_size = (800, 608)  # (width, height)
         image_resized = cv2.resize(image_rgb, target_size)
         
         # Normalize to [0, 1] range
         image_normalized = image_resized.astype(np.float32) / 255.0
         
-        # Add batch dimension [1, H, W, C] or [1, C, H, W] depending on model
-        image_tensor = np.expand_dims(image_normalized, axis=0)
+        # Convert from HWC to CHW format and add batch dimension [1, C, H, W]
+        image_tensor = np.transpose(image_normalized, (2, 0, 1))  # HWC -> CHW
+        image_tensor = np.expand_dims(image_tensor, axis=0)       # Add batch dim
         
         return image_tensor
     
@@ -213,7 +213,7 @@ class OCREngine:
             Preprocessed tensor for recognition
         """
         # Resize to recognizer input size (typically rectangular, e.g., 100x32)
-        target_size = (100, 32)  # Width x Height for text recognition
+        target_size = (1000, 64)  # Width x Height for text recognition (model expects 64x1000)  # Width x Height for text recognition
         region_resized = cv2.resize(region, target_size)
         
         # Convert to grayscale if needed

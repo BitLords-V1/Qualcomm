@@ -43,7 +43,13 @@ def initialize_engines():
         ocr_engine = OCREngine()
         
         logger.info("Initializing Whisper engine with QNN...")
-        whisper_engine = WhisperSmallEngine()
+        #whisper_engine = WhisperSmallEngine()
+        try:
+            whisper_engine = WhisperSmallEngine()
+        except Exception as e:
+            logger.warning(f"Whisper failed: {e}")
+            logger.info("Continuing with OCR-only mode")
+            whisper_engine = None
         
         logger.info("Initializing command agent...")
         command_agent = CommandAgent()
