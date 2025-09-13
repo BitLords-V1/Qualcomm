@@ -41,9 +41,15 @@ def initialize_engines():
     
     try:
         logger.info("Initializing OCR engine with QNN...")
-        ocr_engine = OCREngine()
-        engines_initialized += 1
-        logger.info("✓ OCR engine initialized successfully")
+        ocr_engine = OCREngine(
+            detector_path="models/easyocr_detector/model.onnx",
+            recognizer_path="models/easyocr_recognizer/model.onnx"
+        )
+        if ocr_engine.is_ready():
+            engines_initialized += 1
+            logger.info("✓ OCR engine initialized successfully")
+        else:
+            logger.warning("⚠ OCR engine initialized in limited mode (requires QNN/NPU)")
         
     except Exception as e:
         logger.error(f"✗ Failed to initialize OCR engine: {e}")
@@ -88,11 +94,12 @@ def health_check():
         'status': 'online',
         'offline': True,
         'engines': {
-            'ocr': ocr_engine is not None,
+            'ocr': ocr_engine is not None and ocr_engine.is_ready(),
             'whisper': whisper_engine is not None and whisper_engine.is_ready(),
             'agent': command_agent is not None
         },
         'npu_available': ocr_engine.npu_available if ocr_engine else False,
+        'ocr_ready': ocr_engine.is_ready() if ocr_engine else False,
         'whisper_ready': whisper_engine.is_ready() if whisper_engine else False
     })
 
@@ -101,7 +108,24 @@ def process_ocr():
     """Process webcam image for text extraction using EasyOCR + QNN"""
     try:
         if not ocr_engine:
-            return jsonify({'error': 'OCR engine not initialized'}), 500
+            return jsonify({
+                'success': False,
+                'error': 'OCR engine not initialized',
+                'text': '',
+                'confidence': 0.0,
+                'npu_used': False,
+                'inference_time': 0.0
+            }), 503
+            
+        if not ocr_engine.is_ready():
+            return jsonify({
+                'success': False,
+                'error': 'OCR engine not ready - requires QNN/NPU hardware',
+                'text': '',
+                'confidence': 0.0,
+                'npu_used': False,
+                'inference_time': 0.0
+            }), 503
             
         # Get image data from request
         data = request.get_json()
@@ -121,12 +145,24 @@ def process_ocr():
         # Process with OCR engine
         result = ocr_engine.extract_text(opencv_image)
         
+        # Check if OCR was successful
+        if result.get('error'):
+            return jsonify({
+                'success': False,
+                'error': result['error'],
+                'text': result.get('text', ''),
+                'confidence': result.get('confidence', 0.0),
+                'npu_used': result.get('npu_used', False),
+                'inference_time': result.get('inference_time', 0.0)
+            }), 500
+        
         return jsonify({
             'success': True,
             'text': result['text'],
             'confidence': result['confidence'],
             'npu_used': result['npu_used'],
-            'inference_time': result['inference_time']
+            'inference_time': result['inference_time'],
+            'regions_detected': result.get('regions_detected', 0)
         })
         
     except Exception as e:

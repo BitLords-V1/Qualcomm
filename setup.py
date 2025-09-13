@@ -90,8 +90,9 @@ def check_models():
     
     models_dir = Path("backend/models")
     required_models = [
-        "easyocr_qnn.onnx",
-        "whisper_tiny_en_qnn.onnx"
+        "easyocr_qnn/model.onnx",
+        "whisper_encoder/model.onnx",
+        "whisper_decoder/model.onnx",
     ]
     
     missing_models = []
