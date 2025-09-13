@@ -14,7 +14,7 @@ import onnxruntime as ort
 logger = logging.getLogger(__name__)
 
 class OCREngine:
-    def __init__(self, model_path="models/easyocr_qnn.onnx"):
+    def __init__(self, model_path="../models/easyocr_qnn/model.onnx"):
         """
         Initialize OCR engine with QNN Execution Provider
         

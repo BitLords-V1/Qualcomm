@@ -36,21 +36,49 @@ def initialize_engines():
     """Initialize all AI engines with QNN Execution Provider"""
     global ocr_engine, whisper_engine, command_agent
     
+    engines_initialized = 0
+    total_engines = 3
+    
     try:
         logger.info("Initializing OCR engine with QNN...")
         ocr_engine = OCREngine()
-        
-        logger.info("Initializing Whisper engine with QNN...")
-        whisper_engine = WhisperEngine()
-        
-        logger.info("Initializing command agent...")
-        command_agent = CommandAgent()
-        
-        logger.info("All engines initialized successfully!")
-        return True
+        engines_initialized += 1
+        logger.info("✓ OCR engine initialized successfully")
         
     except Exception as e:
-        logger.error(f"Failed to initialize engines: {e}")
+        logger.error(f"✗ Failed to initialize OCR engine: {e}")
+        ocr_engine = None
+    
+    try:
+        logger.info("Initializing Whisper engine with QNN...")
+        whisper_engine = WhisperEngine()
+        if whisper_engine.is_ready():
+            engines_initialized += 1
+            logger.info("✓ Whisper engine initialized successfully")
+        else:
+            logger.warning("⚠ Whisper engine initialized in limited mode (requires QNN/NPU)")
+        
+    except Exception as e:
+        logger.error(f"✗ Failed to initialize Whisper engine: {e}")
+        whisper_engine = None
+    
+    try:
+        logger.info("Initializing command agent...")
+        command_agent = CommandAgent()
+        engines_initialized += 1
+        logger.info("✓ Command agent initialized successfully")
+        
+    except Exception as e:
+        logger.error(f"✗ Failed to initialize command agent: {e}")
+        command_agent = None
+    
+    logger.info(f"Engine initialization complete: {engines_initialized}/{total_engines} engines ready")
+    
+    # Allow app to start if at least OCR is working
+    if ocr_engine is not None:
+        return True
+    else:
+        logger.error("Critical failure: OCR engine is required but failed to initialize")
         return False
 
 @app.route('/health', methods=['GET'])
@@ -61,10 +89,11 @@ def health_check():
         'offline': True,
         'engines': {
             'ocr': ocr_engine is not None,
-            'whisper': whisper_engine is not None,
+            'whisper': whisper_engine is not None and whisper_engine.is_ready(),
             'agent': command_agent is not None
         },
-        'npu_available': ocr_engine.npu_available if ocr_engine else False
+        'npu_available': ocr_engine.npu_available if ocr_engine else False,
+        'whisper_ready': whisper_engine.is_ready() if whisper_engine else False
     })
 
 @app.route('/ocr', methods=['POST'])
@@ -109,7 +138,24 @@ def process_speech():
     """Process audio for speech-to-text using Whisper + QNN"""
     try:
         if not whisper_engine:
-            return jsonify({'error': 'Whisper engine not initialized'}), 500
+            return jsonify({
+                'success': False,
+                'error': 'Whisper engine not initialized',
+                'text': '',
+                'confidence': 0.0,
+                'npu_used': False,
+                'inference_time': 0.0
+            }), 503
+            
+        if not whisper_engine.is_ready():
+            return jsonify({
+                'success': False,
+                'error': 'Whisper engine not ready - requires QNN/NPU hardware',
+                'text': '',
+                'confidence': 0.0,
+                'npu_used': False,
+                'inference_time': 0.0
+            }), 503
             
         # Get audio data from request
         data = request.get_json()
@@ -122,6 +168,17 @@ def process_speech():
         
         # Process with Whisper engine
         result = whisper_engine.transcribe(audio_bytes)
+        
+        # Check if transcription was successful
+        if result.get('error'):
+            return jsonify({
+                'success': False,
+                'error': result['error'],
+                'text': result.get('text', ''),
+                'confidence': result.get('confidence', 0.0),
+                'npu_used': result.get('npu_used', False),
+                'inference_time': result.get('inference_time', 0.0)
+            }), 500
         
         return jsonify({
             'success': True,
