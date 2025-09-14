@@ -15,6 +15,7 @@ import yaml
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import fitz  # PyMuPDF
+from tts_engine import tts_engine
 
 # Fix SSL certificate issues
 ssl._create_default_https_context = ssl._create_unverified_context
@@ -87,10 +88,7 @@ class AIExamHelper:
             self.anythingllm_ready = False
     
     def send_to_anythingllm(self, message, context=None):
-        """Send message to AnythingLLM and get response"""
-        if not self.anythingllm_ready:
-            return "AI Assistant is in demo mode. All features work with sample data."
-        
+        """Send message to AnythingLLM and get response - REQUIRED for all interactions"""
         try:
             headers = {
                 'Authorization': f'Bearer {self.config["api_key"]}',
@@ -124,11 +122,41 @@ class AIExamHelper:
                 return response_text if response_text else "No response received"
             else:
                 logger.error(f"AnythingLLM API error: {response.status_code}")
-                return "AI assistant temporarily unavailable"
+                return "AI assistant temporarily unavailable - please check AnythingLLM connection"
                 
         except Exception as e:
             logger.error(f"AnythingLLM request failed: {e}")
-            return "AI assistant temporarily unavailable"
+            return "AI assistant temporarily unavailable - please check AnythingLLM connection"
+    
+    def speak_response(self, text):
+        """Speak the response using TTS with enhanced audio output"""
+        try:
+            if text and text.strip():
+                logger.info(f"🔊 Speaking response: {text[:50]}...")
+                success = tts_engine.speak(text)
+                if success:
+                    logger.info("✅ Audio output completed successfully")
+                else:
+                    logger.error("❌ Audio output failed")
+                return success
+            else:
+                logger.warning("No text to speak")
+                return False
+        except Exception as e:
+            logger.error(f"❌ TTS failed: {e}")
+            return False
+    
+    def get_voice_response(self, message, context=None):
+        """Get AI response and speak it aloud with guaranteed audio output"""
+        response = self.send_to_anythingllm(message, context)
+        audio_success = self.speak_response(response)
+        
+        # If TTS fails, try to provide fallback
+        if not audio_success:
+            logger.warning("⚠️ TTS failed, but continuing with text response")
+            # Could add fallback audio here if needed
+        
+        return response
     
     def process_exam_document(self, document_data, document_type="pdf"):
         """Process exam document"""
@@ -160,7 +188,18 @@ class AIExamHelper:
                     'exam_title': exam_analysis.get('exam_title', 'Unknown Exam')
                 }
                 logger.info(f"✅ Exam processed: {exam_analysis.get('total_questions', 0)} questions found")
-                return True, f"Exam processed successfully! Found {exam_analysis.get('total_questions', 0)} questions."
+                
+                # Generate static instructions for the student
+                instructions = self.get_student_instructions()
+                return True, {
+                    'message': f"Exam processed successfully! Found {exam_analysis.get('total_questions', 0)} questions.",
+                    'instructions': instructions,
+                    'exam_info': {
+                        'title': exam_analysis.get('exam_title', 'Unknown'),
+                        'total_questions': exam_analysis.get('total_questions', 0),
+                        'questions': exam_analysis.get('questions', [])
+                    }
+                }
             else:
                 return False, "Failed to extract questions from exam document. Please ensure the PDF contains readable questions."
                 
@@ -304,6 +343,64 @@ class AIExamHelper:
             ]
         }
     
+    def get_student_instructions(self):
+        """Generate voice-friendly instructions for students"""
+        instructions = {
+            'title': 'Welcome to AI Exam Helper - Voice Instructions',
+            'voice_text': """Welcome to AI Exam Helper! I'm your voice assistant for taking exams. 
+            
+            Here's how to use me:
+            
+            First, I will read each question aloud clearly and slowly. Listen carefully to the question and all the answer options.
+            
+            You can use these voice commands anytime: Say 'repeat' to hear the question again, 'slower' to hear it more slowly, 'next' to go to the next question, 'previous' to go back, or 'help' for assistance.
+            
+            When you're ready to answer, simply say your answer like 'A' or 'Paris'. I'll record your answer and ask if you want to move to the next question.
+            
+            When you're finished, say 'end test' or 'finish' and I'll provide you with a summary of your answers.
+            
+            There's no rush! Take as much time as you need. I'm here to help you succeed.
+            
+            Are you ready to begin? Say 'begin' or 'ready' when you want to start.""",
+            'steps': [
+                {
+                    'step': 1,
+                    'title': 'Getting Started',
+                    'description': 'I will read each question aloud clearly and slowly. Listen carefully to the question and all the answer options.'
+                },
+                {
+                    'step': 2,
+                    'title': 'Voice Commands',
+                    'description': 'You can use these voice commands anytime: "repeat" to hear the question again, "slower" to hear it more slowly, "next" to go to the next question, "previous" to go back, or "help" for assistance.'
+                },
+                {
+                    'step': 3,
+                    'title': 'Answering Questions',
+                    'description': 'When you\'re ready to answer, simply say your answer (like "A" or "Paris"). I\'ll record your answer and ask if you want to move to the next question.'
+                },
+                {
+                    'step': 4,
+                    'title': 'Ending the Test',
+                    'description': 'When you\'re finished, say "end test" or "finish" and I\'ll provide you with a summary of your answers.'
+                },
+                {
+                    'step': 5,
+                    'title': 'Take Your Time',
+                    'description': 'There\'s no rush! Take as much time as you need. I\'m here to help you succeed. Say "begin" or "ready" when you want to start.'
+                }
+            ],
+            'voice_commands': [
+                '"ready" or "begin" - Start the exam',
+                '"repeat" - Hear the question again',
+                '"slower" - Hear the question more slowly',
+                '"next" - Go to the next question',
+                '"previous" - Go back to the previous question',
+                '"help" - Get assistance',
+                '"end test" or "finish" - Complete the exam'
+            ]
+        }
+        return instructions
+
     def validate_exam_data(self, data):
         """Validate extracted exam data structure"""
         try:
@@ -326,35 +423,23 @@ class AIExamHelper:
             return False
     
     def get_student_interaction_response(self, student_input, current_question_num):
-        """Generate AI response for student interactions"""
-        if not self.anythingllm_ready:
-            # Demo mode responses
-            response_lower = student_input.lower().strip()
-            if response_lower in ['ready', 'yes', 'start']:
-                return "Great! You're ready to begin. Let's start with Question 1. Are you ready to hear the first question?"
-            elif response_lower in ['repeat', 'again']:
-                return "I'll repeat the current question for you. Please listen carefully."
-            elif response_lower in ['slow', 'slower', 'slowly']:
-                return "I'll read the question more slowly with pauses. Take your time."
-            elif response_lower in ['next', 'continue']:
-                return "Moving to the next question. Let me know if you need me to repeat it."
-            elif response_lower in ['previous', 'back', 'go back']:
-                return "Going back to the previous question. I'm here to help!"
-            elif response_lower in ['help', 'assistance']:
-                return "I'm here to help! You can ask me to repeat questions, read slower, or move between questions. Take your time - there's no rush."
-            else:
-                return "Thank you for your answer! That's recorded. Would you like to move to the next question?"
+        """Generate AI response for student interactions - ALWAYS using AnythingLLM"""
         
-        # Real AnythingLLM response
+        # Get exam session info safely
+        total_questions = 0
+        if self.exam_session:
+            total_questions = self.exam_session.get('questions_total', 0)
+        
+        # ALWAYS use AnythingLLM for all interactions
         interaction_prompt = f"""
         You are an AI assistant helping a student with dyslexia during an exam. The student said: "{student_input}"
         
         Current question number: {current_question_num}
-        Total questions: {self.exam_session.get('questions_total', 0)}
+        Total questions: {total_questions}
         
         Respond appropriately based on what the student said:
         
-        - If they said "ready" or "yes": Confirm they're ready and ask if they want to start with question 1
+        - If they said "ready" or "begin": Confirm they're ready and ask if they want to start with question 1
         - If they said "repeat": Repeat the current question clearly and slowly
         - If they said "slow" or "slower": Read the current question more slowly with pauses
         - If they said "next": Move to the next question
@@ -363,18 +448,21 @@ class AIExamHelper:
         - If they said "help": Offer encouragement and remind them they can ask for repeats or slower reading
         
         Be encouraging, patient, and clear. Speak as if talking to someone with dyslexia.
-        Keep responses short and helpful.
+        Keep responses short and helpful. Always end with a question to keep the conversation going.
         """
         
-        return self.send_to_anythingllm(interaction_prompt)
+        # Always use AnythingLLM - no fallback to hardcoded responses
+        response = self.send_to_anythingllm(interaction_prompt)
+        self.speak_response(response)
+        return response
     
     def start_exam_session(self):
-        """Start the exam session with AnythingLLM"""
+        """Start the exam session - ALWAYS using AnythingLLM"""
         if not self.current_exam:
             return False, "No exam loaded"
         
         try:
-            # Create exam session prompt
+            # Create exam session prompt for AnythingLLM
             session_prompt = f"""
             You are an AI exam assistant for a student with dyslexia. 
             The exam has {self.current_exam.get('total_questions', 0)} questions.
@@ -386,10 +474,11 @@ class AIExamHelper:
             4. Be patient and supportive
             5. Track student answers
             
-            Let's begin with Question 1. Please read it clearly and slowly.
+            Welcome the student and let them know you're ready to help.
+            Ask if they're ready to begin with Question 1.
             """
             
-            response = self.send_to_anythingllm(session_prompt)
+            response = self.get_voice_response(session_prompt)
             return True, response
             
         except Exception as e:
@@ -397,7 +486,7 @@ class AIExamHelper:
             return False, f"Error starting exam: {str(e)}"
     
     def get_current_question(self):
-        """Get the current question with AnythingLLM"""
+        """Get the current question with AnythingLLM and voice output"""
         if not self.current_exam or not self.current_exam.get('questions'):
             return None, "No exam loaded"
         
@@ -420,7 +509,7 @@ class AIExamHelper:
             After reading, ask: "Are you ready to answer, or would you like me to repeat or read more slowly?"
             """
             
-            response = self.send_to_anythingllm(question_prompt)
+            response = self.get_voice_response(question_prompt)
             return current_q, response
             
         except Exception as e:
@@ -437,33 +526,42 @@ class AIExamHelper:
             current_q = self.current_question + 1
             total_q = self.exam_session['questions_total']
             
+            # Handle end test commands
+            if response_lower in ['end test', 'finish', 'end', 'complete', 'done', 'finish test']:
+                # Student wants to end the test
+                self.exam_session['end_time'] = time.time()
+                self.exam_session['status'] = 'completed'
+                ai_response = "Test completed! Let me provide you with a summary of your answers. Great job on completing the exam!"
+                self.speak_response(ai_response)
+                return ai_response
+            
             # Handle different types of responses
-            if response_lower in ['ready', 'yes', 'start']:
+            if response_lower in ['ready', 'yes', 'start', 'begin']:
                 # Student is ready to begin
                 ai_response = self.get_student_interaction_response(response_text, current_q)
                 return ai_response
                 
-            elif response_lower in ['repeat', 'again']:
+            elif response_lower in ['repeat', 'again', 'say again']:
                 # Repeat current question
                 ai_response = self.get_student_interaction_response(response_text, current_q)
                 return ai_response
                 
-            elif response_lower in ['slow', 'slower', 'slowly']:
+            elif response_lower in ['slow', 'slower', 'slowly', 'more slowly']:
                 # Read slower
                 ai_response = self.get_student_interaction_response(response_text, current_q)
                 return ai_response
                 
-            elif response_lower in ['next', 'continue']:
+            elif response_lower in ['next', 'continue', 'next question']:
                 # Move to next question
                 if current_q < total_q:
                     self.current_question += 1
                     self.exam_session['current_question'] = self.current_question
                     ai_response = self.get_student_interaction_response(response_text, self.current_question + 1)
                 else:
-                    ai_response = "You've completed all questions! Great job!"
+                    ai_response = "You've completed all questions! Great job! Would you like to end the test?"
                 return ai_response
                 
-            elif response_lower in ['previous', 'back', 'go back']:
+            elif response_lower in ['previous', 'back', 'go back', 'previous question']:
                 # Move to previous question
                 if current_q > 1:
                     self.current_question -= 1
@@ -473,7 +571,7 @@ class AIExamHelper:
                     ai_response = "This is already the first question."
                 return ai_response
                 
-            elif response_lower in ['help', 'assistance']:
+            elif response_lower in ['help', 'assistance', 'what can i say']:
                 # Provide help
                 ai_response = self.get_student_interaction_response(response_text, current_q)
                 return ai_response
@@ -484,21 +582,19 @@ class AIExamHelper:
                 self.student_answers[question_num] = response_text
                 self.exam_session['questions_answered'] += 1
                 
-                # Generate AI feedback for the answer
-                if self.anythingllm_ready:
-                    feedback_prompt = f"""
-                    A student with dyslexia just answered question {question_num} with: "{response_text}"
-                    
-                    The question was: {self.current_exam['questions'][self.current_question]['question_text']}
-                    The options were: {self.current_exam['questions'][self.current_question]['options']}
-                    
-                    Provide encouraging feedback and ask if they want to move to the next question.
-                    Be supportive and clear. Don't reveal the correct answer.
-                    """
-                    
-                    ai_response = self.send_to_anythingllm(feedback_prompt)
-                else:
-                    ai_response = f"Thank you for your answer: '{response_text}'. That's recorded! Would you like to move to the next question?"
+                # Generate AI feedback for the answer - ALWAYS using AnythingLLM
+                feedback_prompt = f"""
+                A student with dyslexia just answered question {question_num} with: "{response_text}"
+                
+                The question was: {self.current_exam['questions'][self.current_question]['question_text']}
+                The options were: {self.current_exam['questions'][self.current_question]['options']}
+                
+                Provide encouraging feedback and ask if they want to move to the next question.
+                Be supportive and clear. Don't reveal the correct answer.
+                Keep your response conversational and encouraging.
+                """
+                
+                ai_response = self.get_voice_response(feedback_prompt)
                 
                 # Move to next question
                 if current_q < total_q:
@@ -512,22 +608,24 @@ class AIExamHelper:
             return f"Error processing response: {str(e)}"
     
     def get_exam_summary(self):
-        """Get exam summary using AnythingLLM"""
+        """Get exam summary - ALWAYS using AnythingLLM"""
         if not self.exam_session:
             return "No exam session active"
         
         try:
             summary_prompt = f"""
-            Please provide a summary of the exam session:
+            Please provide a comprehensive summary of the exam session for a student with dyslexia:
             
             Total questions: {self.exam_session['questions_total']}
             Questions answered: {self.exam_session['questions_answered']}
             Student answers: {self.student_answers}
             
-            Provide encouragement and next steps for the student.
+            Provide encouragement, acknowledge their effort, and give positive feedback.
+            Be supportive and celebrate their completion of the exam.
+            Keep the tone encouraging and uplifting.
             """
             
-            return self.send_to_anythingllm(summary_prompt)
+            return self.get_voice_response(summary_prompt)
         
         except Exception as e:
             logger.error(f"Failed to get exam summary: {e}")
@@ -544,14 +642,43 @@ def health_check():
         'ai_ready': True,
         'anythingllm_connected': ai_exam_helper.anythingllm_ready,
         'npu_available': ai_exam_helper.anythingllm_ready,
+        'tts_status': tts_engine.get_status(),
         'features_working': {
             'exam_processing': True,
             'ai_conversation': True,
             'question_reading': True,
             'answer_tracking': True,
+            'voice_output': tts_engine.get_status()['available'],
             'npu_acceleration': ai_exam_helper.anythingllm_ready
         }
     })
+
+@app.route('/test-voice', methods=['POST'])
+def test_voice():
+    """Test voice output with comprehensive audio testing"""
+    try:
+        test_message = "Hello! This is a test of the voice system. Can you hear this clearly? If you can hear this, the audio output is working perfectly!"
+        audio_success = ai_exam_helper.speak_response(test_message)
+        
+        return jsonify({
+            'success': True,
+            'message': test_message,
+            'audio_output_success': audio_success,
+            'tts_status': tts_engine.get_status(),
+            'audio_info': {
+                'engine': tts_engine.get_status()['engine'],
+                'available': tts_engine.get_status()['available'],
+                'test_completed': True
+            }
+        })
+    except Exception as e:
+        logger.error(f"Voice test failed: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'audio_output_success': False,
+            'tts_status': tts_engine.get_status()
+        }), 500
 
 @app.route('/process-exam', methods=['POST'])
 def process_exam():
@@ -574,15 +701,25 @@ def process_exam():
         success, message = ai_exam_helper.process_exam_document(document_bytes, document_type)
         
         if success:
-            return jsonify({
-                'success': True,
-                'message': message,
-                'exam_info': {
-                    'title': ai_exam_helper.current_exam.get('exam_title', 'Unknown'),
-                    'total_questions': ai_exam_helper.current_exam.get('total_questions', 0),
-                    'questions': ai_exam_helper.current_exam.get('questions', [])
-                }
-            })
+            if isinstance(message, dict):
+                # New format with instructions
+                return jsonify({
+                    'success': True,
+                    'message': message['message'],
+                    'instructions': message['instructions'],
+                    'exam_info': message['exam_info']
+                })
+            else:
+                # Legacy format
+                return jsonify({
+                    'success': True,
+                    'message': message,
+                    'exam_info': {
+                        'title': ai_exam_helper.current_exam.get('exam_title', 'Unknown'),
+                        'total_questions': ai_exam_helper.current_exam.get('total_questions', 0),
+                        'questions': ai_exam_helper.current_exam.get('questions', [])
+                    }
+                })
         else:
             return jsonify({
                 'success': False,
@@ -617,6 +754,44 @@ def start_exam():
     except Exception as e:
         logger.error(f"Exam start error: {e}")
         return jsonify({'error': f'Failed to start exam: {str(e)}'}), 500
+
+@app.route('/start-voice-exam', methods=['POST'])
+def start_voice_exam():
+    """Start voice-driven exam session with guaranteed audio output"""
+    try:
+        if not ai_exam_helper.current_exam:
+            return jsonify({'error': 'No exam loaded'}), 400
+        
+        # Create comprehensive welcome message
+        welcome_message = f"""Welcome to your voice exam! I found {ai_exam_helper.current_exam.get('total_questions', 0)} questions for you. 
+        
+        I will read each question aloud clearly and slowly. You can say 'repeat' to hear it again, 'slower' to hear it more slowly, or just give your answer.
+        
+        When you're ready to begin, say 'begin' or 'ready'. Take your time - there's no rush!
+        
+        This is a voice-only exam, so everything will be spoken aloud. Just listen and respond with your voice."""
+        
+        # Ensure audio output
+        audio_success = ai_exam_helper.speak_response(welcome_message)
+        
+        return jsonify({
+            'success': True,
+            'message': welcome_message,
+            'voice_enabled': True,
+            'audio_output_success': audio_success,
+            'session_info': {
+                'total_questions': ai_exam_helper.exam_session['questions_total'],
+                'current_question': ai_exam_helper.current_question + 1
+            },
+            'audio_info': {
+                'engine': tts_engine.get_status()['engine'],
+                'available': tts_engine.get_status()['available']
+            }
+        })
+            
+    except Exception as e:
+        logger.error(f"Voice exam start error: {e}")
+        return jsonify({'error': f'Failed to start voice exam: {str(e)}'}), 500
 
 @app.route('/get-question', methods=['GET'])
 def get_question():

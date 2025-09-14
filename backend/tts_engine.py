@@ -49,10 +49,10 @@ class TTSEngine:
             return False
     
     def speak(self, text):
-        """Speak text using system TTS"""
+        """Speak text using system TTS with enhanced audio output"""
         if not self.tts_engine or not text.strip():
             logger.warning("TTS not available or no text to speak")
-            return
+            return False
         
         try:
             # Stop any current speech
@@ -60,34 +60,65 @@ class TTSEngine:
             
             # Update current text
             self.current_text = text
-            logger.info(f"Speaking text: {text[:50]}...")
+            logger.info(f"🔊 Speaking text: {text[:50]}...")
             
-            # Speak directly (not in thread for now to debug)
+            # Speak with enhanced audio output
             if self.tts_engine == 'say':
-                # macOS say command - try Alex voice first, fallback to default
+                # macOS say command with better voice and rate
                 try:
-                    subprocess.run(['say', '-r', '150', '-v', 'Alex', text], check=True)
-                    logger.info("TTS completed successfully")
+                    # Try with Alex voice first (clearer for educational content)
+                    result = subprocess.run([
+                        'say', 
+                        '-r', '160',  # Slightly faster rate for better comprehension
+                        '-v', 'Alex',  # Clear, educational voice
+                        text
+                    ], check=True, capture_output=True, text=True)
+                    logger.info("✅ TTS completed successfully with Alex voice")
+                    return True
                 except Exception as e:
-                    logger.error(f"Alex voice failed: {e}, trying default")
-                    subprocess.run(['say', '-r', '150', text], check=True)
-                    logger.info("TTS completed with default voice")
+                    logger.warning(f"Alex voice failed: {e}, trying default voice")
+                    try:
+                        # Fallback to default voice
+                        result = subprocess.run([
+                            'say', 
+                            '-r', '160',
+                            text
+                        ], check=True, capture_output=True, text=True)
+                        logger.info("✅ TTS completed successfully with default voice")
+                        return True
+                    except Exception as e2:
+                        logger.error(f"Default voice also failed: {e2}")
+                        return False
+                        
             elif self.tts_engine == 'espeak':
                 # Linux espeak command
-                subprocess.run(['espeak', '-s', '200', '-v', 'en+f3', text], check=True)
+                result = subprocess.run([
+                    'espeak', 
+                    '-s', '180',  # Speed
+                    '-v', 'en+f3',  # Female voice
+                    '-a', '200',  # Amplitude
+                    text
+                ], check=True, capture_output=True, text=True)
+                logger.info("✅ TTS completed successfully with espeak")
+                return True
+                
             elif self.tts_engine == 'sapi':
-                # Windows SAPI
-                escaped_text = text.replace('"', '\\"')
-                subprocess.run([
-                    'powershell', '-Command',
-                    f'Add-Type -AssemblyName System.Speech; (New-Object System.Speech.Synthesis.SpeechSynthesizer).Speak("{escaped_text}")'
-                ], check=True)
+                # Windows SAPI with PowerShell
+                escaped_text = text.replace('"', '\\"').replace("'", "\\'")
+                cmd = f'Add-Type -AssemblyName System.Speech; $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer; $synth.Rate = 2; $synth.Speak("{escaped_text}")'
+                result = subprocess.run([
+                    'powershell', '-Command', cmd
+                ], check=True, capture_output=True, text=True)
+                logger.info("✅ TTS completed successfully with Windows SAPI")
+                return True
             
             self.is_speaking = False
+            return True
             
         except Exception as e:
-            logger.error(f"Failed to speak text: {e}")
+            logger.error(f"❌ Failed to speak text: {e}")
             self.is_speaking = False
+            return False
     
     def stop_speaking(self):
         """Stop current speech"""
