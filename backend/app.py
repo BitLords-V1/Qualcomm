@@ -1,6 +1,5 @@
 """
-iLumina Backend - Flask API for offline exam assistance
-Optimized for Qualcomm NPU (QNN Execution Provider)
+iLumina Backend - Simple PDF OCR for MCQ Questions
 """
 
 import os
@@ -9,18 +8,18 @@ import json
 import base64
 import io
 import logging
+import ssl
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import cv2
+import fitz  # PyMuPDF
+import pytesseract
+import re
 import numpy as np
 from PIL import Image
+from tts_engine import tts_engine
 
-# Import our custom modules
-#from ocr_qnn import OCREngine
-from easy_ocr_qnn import OCREngine
-#from whisper_qnn import WhisperEngine
-from whisper_small_qnn import WhisperSmallEngine
-from agent_local import CommandAgent
+# Fix SSL certificate issues
+ssl._create_default_https_context = ssl._create_unverified_context
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -29,177 +28,313 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app)
 
-# Initialize engines
-ocr_engine = None
-whisper_engine = None
-command_agent = None
+# Configure Tesseract path (if needed)
+# pytesseract.pytesseract.tesseract_cmd = '/opt/homebrew/bin/tesseract'
 
-def initialize_engines():
-    """Initialize all AI engines with QNN Execution Provider"""
-    global ocr_engine, whisper_engine, command_agent
-    
+def initialize_ocr():
+    """Initialize Tesseract OCR"""
     try:
-        logger.info("Initializing OCR engine with QNN...")
-        ocr_engine = OCREngine()
-        
-        logger.info("Initializing Whisper engine with QNN...")
-        #whisper_engine = WhisperSmallEngine()
-        try:
-            whisper_engine = WhisperSmallEngine()
-        except Exception as e:
-            logger.warning(f"Whisper failed: {e}")
-            logger.info("Continuing with OCR-only mode")
-            whisper_engine = None
-        
-        logger.info("Initializing command agent...")
-        command_agent = CommandAgent()
-        
-        logger.info("All engines initialized successfully!")
+        logger.info("Initializing Tesseract OCR...")
+        # Test Tesseract by running a simple command
+        pytesseract.get_tesseract_version()
+        logger.info("✅ Tesseract OCR initialized successfully!")
         return True
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize Tesseract: {e}")
+        return False
+
+def pdf_to_images(pdf_path):
+    """Convert PDF pages to images"""
+    try:
+        doc = fitz.open(pdf_path)
+        images = []
+        
+        for page_num in range(len(doc)):
+            page = doc[page_num]
+            # Convert to image with good quality
+            mat = fitz.Matrix(2.0, 2.0)  # 2x zoom
+            pix = page.get_pixmap(matrix=mat)
+            img_data = pix.tobytes("png")
+            images.append(img_data)
+            logger.info(f"Converted page {page_num + 1}/{len(doc)}")
+        
+        doc.close()
+        return images
+    except Exception as e:
+        logger.error(f"PDF conversion failed: {e}")
+        return []
+
+def extract_text_from_image(image_data):
+    """Extract text from image using Tesseract OCR"""
+    try:
+        # Convert bytes to PIL Image
+        img = Image.open(io.BytesIO(image_data))
+        
+        # Run Tesseract OCR
+        # Use PSM 6 for uniform block of text (good for documents)
+        text = pytesseract.image_to_string(img, config='--psm 6')
+        
+        # Clean up the text
+        text = text.strip()
+        
+        if text:
+            logger.info(f"Extracted text: {text[:200]}...")
+            return text
+        else:
+            logger.warning("No text extracted from image")
+            return ""
         
     except Exception as e:
-        logger.error(f"Failed to initialize engines: {e}")
-        return False
+        logger.error(f"Tesseract OCR failed: {e}")
+        return ""
+
+def format_as_questions(extracted_text):
+    """Format extracted text as properly structured MCQ questions with options"""
+    try:
+        if not extracted_text:
+            return "No text detected"
+        
+        # Clean up text but preserve some structure
+        combined_text = re.sub(r'\s+', ' ', extracted_text).strip()
+        
+        logger.info(f"Combined text: {combined_text[:300]}...")
+        
+        # Remove header/instructions (text before first question number)
+        first_question_match = re.search(r'\b1[\.\)]\s*', combined_text)
+        if first_question_match:
+            combined_text = combined_text[first_question_match.start():]
+            logger.info(f"Removed header, text now starts with: {combined_text[:100]}...")
+        
+        # Simple but effective approach: Split by question numbers at word boundaries
+        # This prevents matching numbers in the middle of sentences
+        question_pattern = r'(\b\d+[\.\)]\s+)'
+        parts = re.split(question_pattern, combined_text)
+        
+        logger.info(f"Split into {len(parts)} parts")
+        
+        questions = []
+        
+        # Process each part
+        for i in range(1, len(parts), 2):  # Skip question numbers, process content
+            if i + 1 < len(parts):
+                question_number = parts[i].strip()
+                question_content = parts[i + 1].strip()
+                
+                logger.info(f"Processing question {question_number}: {question_content[:100]}...")
+                
+                if question_content:
+                    # Clean up the question content
+                    question_content = re.sub(r'\s+', ' ', question_content).strip()
+                    
+                    # Add the question number back
+                    full_question = question_number + question_content
+                    
+                    # Ensure it ends with proper punctuation
+                    if not full_question.endswith(('?', '.', '!')):
+                        full_question += "?"
+                    
+                    questions.append(full_question)
+        
+        # Format as Q1, Q2, Q3...
+        formatted_questions = []
+        for i, question in enumerate(questions, 1):
+            formatted_questions.append(f"Q{i}: {question}")
+        
+        logger.info(f"Found {len(formatted_questions)} questions")
+        return "\n\n".join(formatted_questions)
+        
+    except Exception as e:
+        logger.error(f"Question formatting failed: {e}")
+        return "Error formatting questions"
+
 
 @app.route('/health', methods=['GET'])
 def health_check():
-    """Health check endpoint for offline status verification"""
+    """Health check endpoint"""
     return jsonify({
-        'status': 'online',
-        'offline': True,
-        'engines': {
-            'ocr': ocr_engine is not None,
-            'whisper': whisper_engine is not None,
-            'agent': command_agent is not None
-        },
-        'npu_available': ocr_engine.npu_available if ocr_engine else False
+        'status': 'healthy',
+        'ocr_ready': True,  # Tesseract is always ready
+        'tts_ready': tts_engine.get_status()['available']
     })
 
-@app.route('/ocr', methods=['POST'])
-def process_ocr():
-    """Process webcam image for text extraction using EasyOCR + QNN"""
+@app.route('/speak', methods=['POST'])
+def speak_endpoint():
+    """Speak text using TTS"""
     try:
-        if not ocr_engine:
-            return jsonify({'error': 'OCR engine not initialized'}), 500
-            
-        # Get image data from request
         data = request.get_json()
-        if 'image' not in data:
-            return jsonify({'error': 'No image data provided'}), 400
-            
-        # Decode base64 image
-        image_data = data['image'].split(',')[1]  # Remove data:image/jpeg;base64, prefix
-        image_bytes = base64.b64decode(image_data)
+        text = data.get('text', '')
         
-        # Convert to PIL Image
-        image = Image.open(io.BytesIO(image_bytes))
-        
-        # Convert to OpenCV format
-        opencv_image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-        
-        # Process with OCR engine
-        result = ocr_engine.extract_text(opencv_image)
-        
-        return jsonify({
-            'success': True,
-            'text': result['text'],
-            'confidence': result['confidence'],
-            'npu_used': result['npu_used'],
-            'inference_time': result['inference_time']
-        })
-        
-    except Exception as e:
-        logger.error(f"OCR processing error: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/stt', methods=['POST'])
-def process_speech():
-    """Process audio for speech-to-text using Whisper + QNN"""
-    try:
-        if not whisper_engine:
-            return jsonify({'error': 'Whisper engine not initialized'}), 500
-            
-        # Get audio data from request
-        data = request.get_json()
-        if 'audio' not in data:
-            return jsonify({'error': 'No audio data provided'}), 400
-            
-        # Decode base64 audio
-        audio_data = data['audio'].split(',')[1]  # Remove data:audio/wav;base64, prefix
-        audio_bytes = base64.b64decode(audio_data)
-        
-        # Process with Whisper engine
-        result = whisper_engine.transcribe(audio_bytes)
-        
-        return jsonify({
-            'success': True,
-            'text': result['text'],
-            'confidence': result['confidence'],
-            'npu_used': result['npu_used'],
-            'inference_time': result['inference_time']
-        })
-        
-    except Exception as e:
-        logger.error(f"Speech processing error: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/command', methods=['POST'])
-def process_command():
-    """Process text commands and execute actions"""
-    try:
-        if not command_agent:
-            return jsonify({'error': 'Command agent not initialized'}), 500
-            
-        data = request.get_json()
-        if 'text' not in data:
-            return jsonify({'error': 'No command text provided'}), 400
-            
-        command_text = data['text']
-        
-        # Process command with agent
-        result = command_agent.process_command(command_text)
-        
-        return jsonify({
-            'success': True,
-            'action': result['action'],
-            'response': result['response'],
-            'tts_text': result['tts_text']
-        })
-        
-    except Exception as e:
-        logger.error(f"Command processing error: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/tts', methods=['POST'])
-def text_to_speech():
-    """Convert text to speech using offline TTS"""
-    try:
-        if not command_agent:
-            return jsonify({'error': 'Command agent not initialized'}), 500
-            
-        data = request.get_json()
-        if 'text' not in data:
+        if not text.strip():
             return jsonify({'error': 'No text provided'}), 400
-            
-        text = data['text']
         
-        # Use command agent's TTS
-        command_agent.speak(text)
+        tts_engine.speak(text)
         
         return jsonify({
             'success': True,
-            'message': 'Speech generated successfully'
+            'message': 'Text is being spoken',
+            'text': text
         })
         
     except Exception as e:
-        logger.error(f"TTS error: {e}")
+        logger.error(f"TTS endpoint error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/repeat', methods=['POST'])
+def repeat_text():
+    """Repeat the last extracted text"""
+    try:
+        tts_engine.repeat()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Repeating last text',
+            'text': tts_engine.current_text
+        })
+        
+    except Exception as e:
+        logger.error(f"Repeat endpoint error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/upload-pdf', methods=['POST'])
+def upload_pdf():
+    """Handle PDF upload and OCR processing"""
+    try:
+        
+        # Check if file was uploaded
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file uploaded'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        if not file.filename.lower().endswith('.pdf'):
+            return jsonify({'error': 'File must be a PDF'}), 400
+        
+        # Save file temporarily
+        temp_path = f"/tmp/{file.filename}"
+        file.save(temp_path)
+        
+        try:
+            logger.info(f"Processing PDF: {file.filename}")
+            
+            # Convert PDF to images
+            images = pdf_to_images(temp_path)
+            if not images:
+                return jsonify({'error': 'Failed to convert PDF to images'}), 500
+            
+            # Extract text from each page
+            all_text = ""
+            for i, image_data in enumerate(images):
+                logger.info(f"Processing page {i + 1}/{len(images)}")
+                page_text = extract_text_from_image(image_data)
+                if page_text:
+                    all_text += page_text + "\n"
+            
+            # Format as questions
+            questions = format_as_questions(all_text)
+            
+            # Speak the extracted text
+            if all_text.strip():
+                logger.info(f"Extracted text from PDF: {all_text[:100]}...")
+                logger.info("Calling TTS engine for PDF...")
+                tts_engine.speak(all_text)
+                logger.info("TTS call completed for PDF")
+            else:
+                logger.warning("No text extracted from PDF, skipping TTS")
+            
+            return jsonify({
+                'success': True,
+                'questions': questions,
+                'pages_processed': len(images),
+                'filename': file.filename,
+                'extracted_text': all_text,
+                'tts_spoken': bool(all_text.strip())
+            })
+            
+        finally:
+            # Clean up temp file
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+    
+    except Exception as e:
+        logger.error(f"PDF processing error: {e}")
+@app.route('/upload-image', methods=['POST'])
+def upload_image():
+    """Handle image upload and OCR processing"""
+    try:
+        
+        # Check if file was uploaded
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file uploaded'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        # Check if it's an image
+        allowed_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff'}
+        file_ext = os.path.splitext(file.filename.lower())[1]
+        if file_ext not in allowed_extensions:
+            return jsonify({'error': 'File must be an image (PNG, JPG, JPEG, GIF, BMP, TIFF)'}), 400
+        
+        # Save file temporarily
+        temp_path = f"/tmp/{file.filename}"
+        file.save(temp_path)
+        
+        try:
+            logger.info(f"Processing image: {file.filename}")
+            
+            # Read image file
+            with open(temp_path, 'rb') as f:
+                image_data = f.read()
+            
+            # Extract text from image
+            extracted_text = extract_text_from_image(image_data)
+            
+            # Format as questions
+            questions = format_as_questions(extracted_text)
+            
+            # Speak the extracted text
+            if extracted_text.strip():
+                logger.info(f"Extracted text: {extracted_text[:100]}...")
+                logger.info("Calling TTS engine...")
+                tts_engine.speak(extracted_text)
+                logger.info("TTS call completed")
+            else:
+                logger.warning("No text extracted, skipping TTS")
+            
+            return jsonify({
+                'success': True,
+                'questions': questions,
+                'filename': file.filename,
+                'extracted_text': extracted_text,
+                'tts_spoken': bool(extracted_text.strip())
+            })
+            
+        finally:
+            # Clean up temp file
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+    
+    except Exception as e:
+        logger.error(f"Image processing error: {e}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    # Initialize engines on startup
-    if initialize_engines():
-        logger.info("Starting iLumina backend server...")
-        app.run(host='127.0.0.1', port=5000, debug=False)
+    # Initialize OCR
+    if initialize_ocr():
+        logger.info("🚀 Starting PDF OCR server...")
     else:
-        logger.error("Failed to initialize engines. Exiting...")
+        logger.error("❌ Failed to initialize OCR. Exiting...")
         sys.exit(1)
+    
+    # TTS is automatically initialized when imported
+    tts_status = tts_engine.get_status()
+    if tts_status['available']:
+        logger.info(f"🎤 TTS engine ready! ({tts_status['engine']})")
+    else:
+        logger.warning("⚠️ TTS not available - speech features disabled")
+    
+    # Start Flask server
+    app.run(host='127.0.0.1', port=5000, debug=True)

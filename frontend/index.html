@@ -3,134 +3,389 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>iLumina - Offline Exam Helper</title>
-    <link rel="stylesheet" href="styles.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <title>iLumina - MCQ Exam Helper</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .main-card {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+
+        .upload-section {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .upload-section h2 {
+            color: #4a5568;
+            margin-bottom: 20px;
+            font-size: 1.8rem;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            display: inline-block;
+            margin-bottom: 20px;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .file-input-label {
+            display: inline-block;
+            padding: 15px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 1.1rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            border: none;
+        }
+
+        .file-input-label:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+
+        .file-name {
+            margin-top: 10px;
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-width: 120px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+        }
+
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #cbd5e0;
+        }
+
+        .btn-success {
+            background: #48bb78;
+            color: white;
+        }
+
+        .btn-success:hover:not(:disabled) {
+            background: #38a169;
+        }
+
+        .btn-info {
+            background: #4299e1;
+            color: white;
+        }
+
+        .btn-info:hover:not(:disabled) {
+            background: #3182ce;
+        }
+
+        .btn-warning {
+            background: #ed8936;
+            color: white;
+        }
+
+        .btn-warning:hover:not(:disabled) {
+            background: #dd6b20;
+        }
+
+        .tts-controls {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border: 2px solid #e9ecef;
+        }
+
+        .tts-controls h3 {
+            margin-bottom: 15px;
+            color: #495057;
+            text-align: center;
+        }
+
+        .tts-status {
+            margin-top: 15px;
+            text-align: center;
+            padding: 10px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+
+        .status-indicator {
+            font-size: 1.2rem;
+            margin-right: 8px;
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .status {
+            text-align: center;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            font-weight: 500;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .results-header {
+            background: #f7fafc;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+
+        .results-header h3 {
+            color: #2d3748;
+            margin-bottom: 15px;
+            font-size: 1.5rem;
+        }
+
+        .stats {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .stat {
+            background: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            color: #4a5568;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .questions-content {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            border: 1px solid #e9ecef;
+        }
+
+        .questions-content pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: 'Courier New', monospace;
+            font-size: 0.95rem;
+            line-height: 1.6;
+            color: #2d3748;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .footer {
+            text-align: center;
+            color: white;
+            opacity: 0.8;
+            margin-top: 30px;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+
+            .main-card {
+                padding: 20px;
+            }
+
+            .header h1 {
+                font-size: 2rem;
+            }
+
+            .button-group {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .stats {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+    </style>
 </head>
 <body>
-    <div class="app-container">
-        <!-- Header -->
-        <header class="app-header">
-            <div class="header-content">
-                <div class="app-title">
-                    <h1>iLumina</h1>
-                    <span class="subtitle">Offline Exam Helper</span>
-                </div>
-                <div class="status-indicators">
-                    <div class="status-item" id="offline-status">
-                        <div class="status-dot offline"></div>
-                        <span>Offline Mode</span>
-                    </div>
-                    <div class="status-item" id="npu-status">
-                        <div class="status-dot" id="npu-dot"></div>
-                        <span id="npu-text">NPU Status</span>
-                    </div>
-                    <div class="status-item" id="backend-status">
-                        <div class="status-dot" id="backend-dot"></div>
-                        <span id="backend-text">Backend</span>
-                    </div>
-                </div>
-            </div>
-        </header>
-
-        <!-- Main Content -->
-        <main class="main-content">
-            <!-- Camera Section -->
-            <section class="camera-section">
-                <div class="camera-container">
-                    <video id="webcam" autoplay muted playsinline></video>
-                    <div class="camera-overlay">
-                        <div class="camera-controls">
-                            <button id="capture-btn" class="btn btn-primary">
-                                <span class="btn-icon">📷</span>
-                                OCR & Read
-                            </button>
-                            <button id="start-recording" class="btn btn-secondary">
-                                <span class="btn-icon">🎤</span>
-                                Start Voice
-                            </button>
-                            <button id="stop-recording" class="btn btn-danger" disabled>
-                                <span class="btn-icon">⏹️</span>
-                                Stop Voice
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Text Display Section -->
-            <section class="text-section">
-                <div class="text-container">
-                    <div class="text-header">
-                        <h3>Extracted Text</h3>
-                        <div class="text-actions">
-                            <button id="repeat-btn" class="btn btn-small">
-                                <span class="btn-icon">🔄</span>
-                                Repeat
-                            </button>
-                            <button id="slower-btn" class="btn btn-small">
-                                <span class="btn-icon">🐌</span>
-                                Slower
-                            </button>
-                            <button id="faster-btn" class="btn btn-small">
-                                <span class="btn-icon">⚡</span>
-                                Faster
-                            </button>
-                            <button id="spell-btn" class="btn btn-small">
-                                <span class="btn-icon">🔤</span>
-                                Spell
-                            </button>
-                        </div>
-                    </div>
-                    <div class="text-display" id="text-display">
-                        <p class="placeholder">Text will appear here after OCR capture...</p>
-                    </div>
-                    <div class="text-metadata" id="text-metadata">
-                        <!-- OCR metadata will be displayed here -->
-                    </div>
-                </div>
-            </section>
-
-            <!-- Voice Commands Section -->
-            <section class="voice-section">
-                <div class="voice-container">
-                    <h3>Voice Commands</h3>
-                    <div class="voice-commands">
-                        <div class="command-item">
-                            <span class="command">"Repeat"</span>
-                            <span class="description">Read the text again</span>
-                        </div>
-                        <div class="command-item">
-                            <span class="command">"Slower"</span>
-                            <span class="description">Speak more slowly</span>
-                        </div>
-                        <div class="command-item">
-                            <span class="command">"Faster"</span>
-                            <span class="description">Speak more quickly</span>
-                        </div>
-                        <div class="command-item">
-                            <span class="command">"Spell"</span>
-                            <span class="description">Spell the text letter by letter</span>
-                        </div>
-                    </div>
-                </div>
-            </section>
-        </main>
-
-        <!-- Loading Overlay -->
-        <div class="loading-overlay" id="loading-overlay">
-            <div class="loading-content">
-                <div class="loading-spinner"></div>
-                <p id="loading-text">Processing...</p>
-            </div>
+    <div class="container">
+        <div class="header">
+            <h1>🎓 iLumina MCQ Exam Helper</h1>
+            <p>Upload your PDF exam paper and extract MCQ questions automatically</p>
         </div>
 
-        <!-- Notification Toast -->
-        <div class="toast" id="toast">
-            <div class="toast-content">
-                <span class="toast-icon">ℹ️</span>
-                <span class="toast-message" id="toast-message">Notification</span>
+        <div class="main-card">
+            <div class="upload-section">
+                <h2>📄 Upload Exam Paper (PDF or Image)</h2>
+                
+                <div class="file-input-wrapper">
+                    <input type="file" id="file-input" class="file-input" accept=".pdf,.png,.jpg,.jpeg,.gif,.bmp,.tiff">
+                    <label for="file-input" class="file-input-label">
+                        📁 Choose PDF or Image File
+                    </label>
+                    <div id="file-name" class="file-name"></div>
+                </div>
+
+                <div class="button-group">
+                    <button id="upload-btn" class="btn btn-primary" disabled>
+                        🚀 Process File
+                    </button>
+                    <button id="clear-btn" class="btn btn-secondary" disabled>
+                        🗑️ Clear Results
+                    </button>
+                    <button id="copy-btn" class="btn btn-secondary" disabled>
+                        📋 Copy Questions
+                    </button>
+                </div>
+                
+                <!-- TTS Controls -->
+                <div class="tts-controls" id="tts-controls" style="display: none;">
+                    <h3>🎤 Audio Controls</h3>
+                    <div class="button-group">
+                        <button id="speak-btn" class="btn btn-success">
+                            🔊 Speak Text
+                        </button>
+                        <button id="repeat-btn" class="btn btn-info">
+                            🔁 Repeat
+                        </button>
+                        <button id="stop-speech-btn" class="btn btn-warning">
+                            ⏹️ Stop Speech
+                        </button>
+                    </div>
+                    <div class="tts-status" id="tts-status">
+                        <span class="status-indicator" id="tts-indicator">🔇</span>
+                        <span id="tts-message">TTS Ready</span>
+                    </div>
+                </div>
             </div>
+
+            <div id="status" class="status"></div>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Processing PDF... This may take a few moments.</p>
+            </div>
+
+            <div id="questions-output" style="display: none;"></div>
+        </div>
+
+        <div class="footer">
+            <p>Powered by EasyOCR • Optimized for Qualcomm NPU</p>
         </div>
     </div>
 

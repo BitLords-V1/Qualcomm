@@ -34,7 +34,7 @@ class ILuminaApp {
             frame: false
         });
 
-        // Load the app
+        // Load the PDF app
         await this.mainWindow.loadFile('index.html');
 
         // Show window when ready
