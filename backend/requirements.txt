@@ -1,0 +1,14 @@
+flask==2.3.3
+flask-cors==4.0.0
+onnxruntime==1.22.1
+opencv-python==4.10.0.84
+numpy==1.26.4
+Pillow==10.4.0
+pyttsx3==2.90
+# pyaudio==0.2.14  # Skip for now due to PortAudio dependency on macOS
+wave==0.0.2
+pyinstaller==6.10.0
+# Additional dependencies for AI Exam Helper with AnythingLLM
+requests==2.31.0
+PyYAML==6.0.1
+PyMuPDF==1.23.14

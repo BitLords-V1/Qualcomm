@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Exam Helper - Accessibility Assistant</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Comic Sans MS', 'Arial', sans-serif;
+            font-size: 20px; line-height: 1.6;
+            background: #ffffff; color: #000000; min-height: 100vh;
+        }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .header {
+            background: #000000; color: #ffffff; padding: 30px;
+            text-align: center; margin-bottom: 30px; border-radius: 10px;
+        }
+        .header h1 { font-size: 36px; font-weight: bold; margin-bottom: 10px; }
+        .status-bar {
+            background: #f0f0f0; padding: 20px; border-radius: 10px;
+            margin-bottom: 30px; border: 3px solid #000000;
+        }
+        .status-item { display: inline-block; margin: 10px 20px; font-size: 18px; font-weight: bold; }
+        .status-dot {
+            display: inline-block; width: 20px; height: 20px; border-radius: 50%;
+            margin-right: 10px; border: 2px solid #000000;
+        }
+        .status-dot.online { background: #00ff00; }
+        .status-dot.offline { background: #ff0000; }
+        .section {
+            background: #ffffff; border: 3px solid #000000; border-radius: 10px;
+            padding: 30px; margin-bottom: 30px;
+        }
+        .section h2 { font-size: 28px; font-weight: bold; margin-bottom: 20px; color: #000000; }
+        .btn {
+            background: #000000; color: #ffffff; border: none; padding: 20px 40px;
+            font-size: 20px; font-weight: bold; border-radius: 10px; cursor: pointer;
+            margin: 10px; min-width: 200px; border: 3px solid #000000;
+        }
+        .btn:hover { background: #ffffff; color: #000000; }
+        .input-field {
+            width: 100%; padding: 20px; font-size: 20px; border: 3px solid #000000;
+            border-radius: 10px; margin: 10px 0; background: #ffffff; color: #000000;
+        }
+        .question-box {
+            background: #f0f8ff; border: 3px solid #0066cc; border-radius: 10px;
+            padding: 30px; margin: 20px 0;
+        }
+        .ai-response {
+            background: #fff8dc; border: 3px solid #ffa500; border-radius: 10px;
+            padding: 20px; margin: 20px 0;
+        }
+        .hidden { display: none; }
+        .notification {
+            position: fixed; top: 20px; right: 20px; padding: 20px;
+            border-radius: 10px; font-size: 18px; font-weight: bold;
+            z-index: 1000; border: 3px solid #000000;
+        }
+        .notification.success { background: #d4edda; color: #155724; }
+        .notification.error { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎓 AI Exam Helper</h1>
+            <p>Accessibility Assistant for Students with Dyslexia</p>
+        </div>
+        <div class="status-bar">
+            <div class="status-item">
+                <span class="status-dot offline" id="backendStatus"></span> Backend
+            </div>
+            <div class="status-item">
+                <span class="status-dot offline" id="npuStatus"></span> NPU
+            </div>
+            <div class="status-item">
+                <span class="status-dot offline" id="aiStatus"></span> AI Assistant
+            </div>
+        </div>
+        <div class="section" id="uploadSection">
+            <h2>📄 Upload Your Exam</h2>
+            <p>Upload your exam PDF file. Our AI will read it aloud and help you answer questions.</p>
+            <input type="file" id="pdfFile" accept=".pdf" style="display: none;">
+            <button class="btn" onclick="document.getElementById('pdfFile').click()">📁 Choose PDF File</button>
+            <p id="fileName" style="margin-top: 15px; font-size: 18px;"></p>
+            <div id="uploadProgress" class="hidden">
+                <p id="progressText">Processing exam...</p>
+            </div>
+        </div>
+        <div class="section hidden" id="examSection">
+            <h2 id="examTitle">Exam in Progress</h2>
+            <p id="questionCounter" style="text-align: center; font-size: 18px; font-weight: bold;">Question 1 of 3</p>
+            <div class="question-box">
+                <div id="questionNumber" style="font-size: 24px; font-weight: bold; margin-bottom: 15px;">Question 1</div>
+                <div id="questionText" style="font-size: 22px; margin-bottom: 20px;">Loading question...</div>
+                <div id="optionsContainer"></div>
+            </div>
+            <div class="ai-response">
+                <h3>🤖 AI Assistant</h3>
+                <p id="aiMessage">Ready to help you with the exam. Let's begin!</p>
+            </div>
+            <div style="margin-top: 30px;">
+                <input type="text" id="studentResponse" class="input-field" 
+                       placeholder="Type your response (e.g., 'ready', 'repeat', 'A) Paris', 'next')" 
+                       style="margin-bottom: 15px;">
+                
+                <div style="text-align: center;">
+                    <button class="btn" id="sendResponse">Send Response</button>
+                    <button class="btn" id="repeatBtn">🔄 Repeat</button>
+                    <button class="btn" id="slowBtn">🐌 Slower</button>
+                    <button class="btn" id="nextBtn">➡️ Next</button>
+                    <button class="btn" id="prevBtn">⬅️ Previous</button>
+                    <button class="btn" id="helpBtn">❓ Help</button>
+                </div>
+            </div>
+        </div>
+        <div class="section hidden" id="summarySection">
+            <h2>🎉 Exam Completed!</h2>
+            <div id="summaryContent"></div>
+            <div style="text-align: center; margin-top: 30px;">
+                <button class="btn" id="newExamBtn">Start New Exam</button>
+            </div>
+        </div>
+    </div>
+    <script>
+        let currentExam = null; let currentQuestion = 0; let examSession = null;
+        document.addEventListener('DOMContentLoaded', function() { checkBackendStatus(); setupEventListeners(); });
+        async function checkBackendStatus() {
+            try {
+                const response = await fetch('http://127.0.0.1:5000/health');
+                const data = await response.json();
+                updateStatusIndicators(data);
+                if (data.anythingllm_connected) {
+                    showNotification('✅ AI Assistant Connected!', 'success');
+                } else {
+                    showNotification('⚠️ AI Assistant not connected. Demo mode active.', 'info');
+                }
+            } catch (error) {
+                showNotification('❌ Backend not available', 'error');
+                updateStatusIndicators({ status: 'unhealthy', anythingllm_connected: false, npu_available: false });
+            }
+        }
+        function updateStatusIndicators(status) {
+            document.getElementById('backendStatus').className = `status-dot ${status.status === 'healthy' ? 'online' : 'offline'}`;
+            document.getElementById('npuStatus').className = `status-dot ${status.npu_available ? 'online' : 'offline'}`;
+            document.getElementById('aiStatus').className = `status-dot ${status.anythingllm_connected ? 'online' : 'offline'}`;
+        }
+        function setupEventListeners() {
+            document.getElementById('pdfFile').addEventListener('change', handleFileUpload);
+            document.getElementById('sendResponse').addEventListener('click', sendStudentResponse);
+            document.getElementById('studentResponse').addEventListener('keypress', function(e) { if (e.key === 'Enter') sendStudentResponse(); });
+            document.getElementById('repeatBtn').addEventListener('click', () => sendStudentResponse('repeat'));
+            document.getElementById('slowBtn').addEventListener('click', () => sendStudentResponse('slow'));
+            document.getElementById('nextBtn').addEventListener('click', () => sendStudentResponse('next'));
+            document.getElementById('prevBtn').addEventListener('click', () => sendStudentResponse('previous'));
+            document.getElementById('helpBtn').addEventListener('click', () => sendStudentResponse('help'));
+            document.getElementById('newExamBtn').addEventListener('click', startNewExam);
+        }
+        async function handleFileUpload(event) {
+            const file = event.target.files[0]; if (!file) return;
+            document.getElementById('fileName').textContent = `Selected: ${file.name}`;
+            showUploadProgress(true);
+            try {
+                const fileData = await fileToBase64(file);
+                const response = await fetch('http://127.0.0.1:5000/process-exam', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ document: fileData, type: 'pdf' })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    currentExam = result.exam_info;
+                    showNotification('✅ Exam processed successfully!', 'success');
+                    startExamSession();
+                } else {
+                    showNotification(`❌ ${result.message}`, 'error');
+                }
+            } catch (error) {
+                showNotification('❌ Failed to process exam', 'error');
+            } finally {
+                showUploadProgress(false);
+            }
+        }
+        async function startExamSession() {
+            try {
+                const response = await fetch('http://127.0.0.1:5000/start-exam', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }
+                });
+                const result = await response.json();
+                if (result.success) {
+                    examSession = result.session_info;
+                    showExamSection();
+                    loadCurrentQuestion();
+                    showNotification('🎓 Exam session started!', 'success');
+                } else {
+                    showNotification(`❌ ${result.message}`, 'error');
+                }
+            } catch (error) {
+                showNotification('❌ Failed to start exam session', 'error');
+            }
+        }
+        async function loadCurrentQuestion() {
+            try {
+                const response = await fetch('http://127.0.0.1:5000/get-question');
+                const result = await response.json();
+                if (result.success) {
+                    updateQuestionDisplay(result);
+                    updateAIResponse(result.message);
+                } else {
+                    showNotification(`❌ ${result.message}`, 'error');
+                }
+            } catch (error) {
+                showNotification('❌ Failed to load question', 'error');
+            }
+        }
+        function updateQuestionDisplay(result) {
+            const question = result.question;
+            document.getElementById('questionNumber').textContent = `Question ${question.question_number}`;
+            document.getElementById('questionText').textContent = question.question_text;
+            const optionsContainer = document.getElementById('optionsContainer');
+            optionsContainer.innerHTML = '';
+            question.options.forEach(option => {
+                const optionDiv = document.createElement('div');
+                optionDiv.style.cssText = 'background: #ffffff; border: 2px solid #000000; padding: 15px; margin: 10px 0; border-radius: 8px; font-size: 20px; cursor: pointer;';
+                optionDiv.textContent = option;
+                optionsContainer.appendChild(optionDiv);
+            });
+            document.getElementById('questionCounter').textContent = `Question ${result.progress.current} of ${result.progress.total}`;
+        }
+        function updateAIResponse(message) { document.getElementById('aiMessage').textContent = message; }
+        async function sendStudentResponse(responseText = null) {
+            const response = responseText || document.getElementById('studentResponse').value.trim();
+            if (!response) return;
+            try {
+                const apiResponse = await fetch('http://127.0.0.1:5000/student-response', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ response: response })
+                });
+                const result = await apiResponse.json();
+                if (result.success) {
+                    updateAIResponse(result.ai_response);
+                    document.getElementById('studentResponse').value = '';
+                    if (result.progress.current > result.progress.total) {
+                        showExamSummary();
+                    } else {
+                        setTimeout(() => { loadCurrentQuestion(); }, 2000);
+                    }
+                } else {
+                    showNotification(`❌ ${result.message}`, 'error');
+                }
+            } catch (error) {
+                showNotification('❌ Failed to send response', 'error');
+            }
+        }
+        async function showExamSummary() {
+            try {
+                const response = await fetch('http://127.0.0.1:5000/exam-summary');
+                const result = await response.json();
+                if (result.success) {
+                    displayExamSummary(result);
+                    showSummarySection();
+                }
+            } catch (error) {
+                showNotification('❌ Failed to get exam summary', 'error');
+            }
+        }
+        function displayExamSummary(result) {
+            const summaryContent = document.getElementById('summaryContent');
+            summaryContent.innerHTML = `
+                <p><strong>Total Questions:</strong> ${result.session_info.questions_total}</p>
+                <p><strong>Questions Answered:</strong> ${result.session_info.questions_answered}</p>
+                <p><strong>Completion Rate:</strong> ${Math.round((result.session_info.questions_answered / result.session_info.questions_total) * 100)}%</p>
+                <div style="margin-top: 20px;"><h4>AI Summary:</h4><p>${result.summary}</p></div>
+            `;
+        }
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => { const base64 = reader.result.split(',')[1]; resolve(base64); };
+                reader.onerror = error => reject(error);
+            });
+        }
+        function showUploadProgress(show) { document.getElementById('uploadProgress').classList.toggle('hidden', !show); }
+        function showExamSection() {
+            document.getElementById('uploadSection').classList.add('hidden');
+            document.getElementById('examSection').classList.remove('hidden');
+            document.getElementById('summarySection').classList.add('hidden');
+        }
+        function showSummarySection() {
+            document.getElementById('uploadSection').classList.add('hidden');
+            document.getElementById('examSection').classList.add('hidden');
+            document.getElementById('summarySection').classList.remove('hidden');
+        }
+        function startNewExam() {
+            document.getElementById('uploadSection').classList.remove('hidden');
+            document.getElementById('examSection').classList.add('hidden');
+            document.getElementById('summarySection').classList.add('hidden');
+            currentExam = null; currentQuestion = 0; examSession = null;
+            document.getElementById('fileName').textContent = '';
+            document.getElementById('pdfFile').value = '';
+        }
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            setTimeout(() => { notification.remove(); }, 3000);
+        }
+    </script>
+</body>
+</html>

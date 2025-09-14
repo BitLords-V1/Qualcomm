@@ -1,0 +1,56 @@
+# AnythingLLM Configuration for AI Exam Helper
+# WINNING HACKATHON IMPLEMENTATION
+
+# ===========================================
+# STEP 1: Install AnythingLLM
+# ===========================================
+# Download from: https://useanything.com/
+# Choose "AnythingLLM NPU" version for Snapdragon X Elite
+
+# ===========================================
+# STEP 2: Configure LLM Provider
+# ===========================================
+# 1. Open AnythingLLM
+# 2. Go to Settings -> LLM Provider
+# 3. Select "AnythingLLM NPU" 
+# 4. Choose "Llama 3.1 8B Chat 8K" model
+# 5. Enable NPU acceleration
+
+# ===========================================
+# STEP 3: Create Workspace
+# ===========================================
+# 1. Create new workspace called "exam-helper"
+# 2. Set workspace slug to "exam-helper"
+# 3. Enable vision capabilities for OCR
+
+# ===========================================
+# STEP 4: Generate API Key
+# ===========================================
+# 1. Go to Settings -> Tools -> Developer API
+# 2. Generate new API key
+# 3. Copy the key and paste below
+
+# ===========================================
+# CONFIGURATION VALUES
+# ===========================================
+api_key: "your-api-key-here"
+model_server_base_url: "http://localhost:3001/api/v1"
+workspace_slug: "exam-helper"
+stream: false
+stream_timeout: 60
+
+# ===========================================
+# NPU ACCELERATION SETTINGS
+# ===========================================
+npu_enabled: true
+model_precision: "int8"  # Optimized for NPU
+batch_size: 1
+max_tokens: 2048
+
+# ===========================================
+# EXAM HELPER SPECIFIC SETTINGS
+# ===========================================
+reading_speed: "slow"  # slow, normal, fast
+voice_enabled: true
+accessibility_mode: true
+dyslexia_support: true
