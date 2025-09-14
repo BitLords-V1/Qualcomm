@@ -1,26 +1,38 @@
 /**
  * iLumina Renderer Process - Frontend Application Logic
  * Handles UI interactions, camera, audio, and backend communication
+ * Browser-compatible version
  */
-
-const { ipcRenderer } = require('electron');
-const axios = require('axios');
 
 class ILuminaRenderer {
     constructor() {
-        this.backendUrl = 'http://127.0.0.1:5000';
+        this.backendUrl = 'http://127.0.0.1:5005';
         this.isRecording = false;
         this.mediaRecorder = null;
         this.audioChunks = [];
         this.currentText = '';
         this.isBackendReady = false;
         
-        // Initialize the application
-        this.init();
+        // Initialize the application when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => this.init());
+        } else {
+            // Wait a bit for axios to load if DOM is already ready
+            setTimeout(() => this.init(), 100);
+        }
     }
 
     async init() {
         console.log('Initializing iLumina renderer...');
+        console.log('Backend URL:', this.backendUrl);
+        
+        // Check if axios is loaded, use fetch as fallback
+        if (typeof axios === 'undefined') {
+            console.warn('Axios not loaded! Using fetch as fallback...');
+            this.useFetch = true;
+        } else {
+            this.useFetch = false;
+        }
         
         // Setup event listeners
         this.setupEventListeners();
@@ -37,10 +49,54 @@ class ILuminaRenderer {
         console.log('iLumina renderer initialized successfully');
     }
 
+    async makeRequest(url, options = {}) {
+        if (this.useFetch) {
+            // Use fetch as fallback
+            const response = await fetch(url, {
+                method: options.method || 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...options.headers
+                },
+                body: options.data ? JSON.stringify(options.data) : undefined,
+                ...options
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            return { data, status: response.status };
+        } else {
+            // Use axios
+            return await axios(url, options);
+        }
+    }
+
     setupEventListeners() {
+        // Test backend button
+        document.getElementById('test-backend').addEventListener('click', () => {
+            this.testBackendConnection();
+        });
+
+        // Test display button
+        document.getElementById('test-display').addEventListener('click', () => {
+            this.testTextDisplay();
+        });
+
         // Camera controls
         document.getElementById('capture-btn').addEventListener('click', () => {
             this.captureAndOCR();
+        });
+
+        // File upload controls
+        document.getElementById('upload-btn').addEventListener('click', () => {
+            document.getElementById('file-input').click();
+        });
+
+        document.getElementById('file-input').addEventListener('change', (e) => {
+            this.handleFileUpload(e);
         });
 
         // Voice controls
@@ -97,14 +153,39 @@ class ILuminaRenderer {
 
     async initializeCamera() {
         try {
+            console.log('Initializing camera...');
             const video = document.getElementById('webcam');
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 },
-                    facingMode: 'environment'
-                }
-            });
+            if (!video) {
+                throw new Error('Video element not found');
+            }
+
+            // Check if getUserMedia is supported
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                throw new Error('Camera not supported in this browser');
+            }
+
+            console.log('Requesting camera access...');
+            let stream;
+            try {
+                // Try environment camera first (back camera on mobile)
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                        facingMode: { ideal: 'environment' }
+                    }
+                });
+            } catch (envError) {
+                console.log('Environment camera failed, trying user camera...');
+                // Fallback to user camera (front camera)
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                        facingMode: { ideal: 'user' }
+                    }
+                });
+            }
             
             video.srcObject = stream;
             video.play();
@@ -114,26 +195,102 @@ class ILuminaRenderer {
             
         } catch (error) {
             console.error('Camera initialization failed:', error);
-            this.showToast('Camera access denied. Please enable camera permissions.', 'error');
+            let errorMessage = 'Camera access failed. ';
+            
+            if (error.name === 'NotAllowedError') {
+                errorMessage += 'Please allow camera access and refresh the page.';
+            } else if (error.name === 'NotFoundError') {
+                errorMessage += 'No camera found on this device.';
+            } else if (error.name === 'NotSupportedError') {
+                errorMessage += 'Camera not supported. Try using HTTPS or a different browser.';
+            } else {
+                errorMessage += error.message;
+            }
+            
+            this.showToast(errorMessage, 'error');
+            
+            // Show a fallback message
+            const video = document.getElementById('webcam');
+            if (video) {
+                video.style.display = 'none';
+                const fallback = document.createElement('div');
+                fallback.innerHTML = `
+                    <div style="padding: 20px; text-align: center; background: #f0f0f0; border-radius: 8px;">
+                        <h3>Camera Not Available</h3>
+                        <p>Please allow camera access or try:</p>
+                        <ul style="text-align: left; display: inline-block;">
+                            <li>Refresh the page and allow camera access</li>
+                            <li>Use HTTPS (https://127.0.0.1:5005)</li>
+                            <li>Try a different browser</li>
+                        </ul>
+                        <button onclick="location.reload()" style="margin-top: 10px; padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                            Refresh Page
+                        </button>
+                    </div>
+                `;
+                video.parentNode.appendChild(fallback);
+            }
         }
+    }
+
+    async testBackendConnection() {
+        console.log('Testing backend connection...');
+        
+        try {
+            const response = await this.makeRequest(`${this.backendUrl}/api/healthz`, { 
+                method: 'GET',
+                timeout: 5000 
+            });
+            console.log('Test successful! Backend response:', response.data);
+            this.showToast('Backend connection successful!', 'success');
+            this.isBackendReady = true;
+            this.updateBackendStatus(true);
+        } catch (error) {
+            console.error('Test failed:', error);
+            this.showToast(`Backend test failed: ${error.message}`, 'error');
+        }
+    }
+
+    testTextDisplay() {
+        console.log('Testing text display...');
+        
+        // Create a test OCR result
+        const testResult = {
+            text: "This is a test text to verify that the display function is working correctly. The text should appear in the Extracted Text section.",
+            confidence: 0.95,
+            success: true
+        };
+        
+        console.log('Test OCR result:', testResult);
+        this.displayText(testResult);
+        this.showToast('Test text displayed!', 'success');
     }
 
     async checkBackendStatus() {
         try {
-            const response = await axios.get(`${this.backendUrl}/health`, { timeout: 2000 });
+            console.log('Checking backend status at:', `${this.backendUrl}/api/healthz`);
+            const response = await this.makeRequest(`${this.backendUrl}/api/healthz`, { 
+                method: 'GET',
+                timeout: 2000 
+            });
             
+            console.log('Backend response:', response.data);
             if (response.status === 200) {
                 this.isBackendReady = true;
                 this.updateBackendStatus(true);
                 this.updateNPUStatus(response.data.npu_available);
+                console.log('Backend is ready');
             } else {
                 this.isBackendReady = false;
                 this.updateBackendStatus(false);
+                console.log('Backend not ready, status:', response.status);
             }
             
         } catch (error) {
             this.isBackendReady = false;
             this.updateBackendStatus(false);
+            console.error('Backend connection failed:', error.message);
+            console.error('Full error:', error);
         }
     }
 
@@ -185,12 +342,18 @@ class ILuminaRenderer {
             const imageData = canvas.toDataURL('image/jpeg', 0.8);
             
             // Send to backend
-            const response = await axios.post(`${this.backendUrl}/ocr`, {
-                image: imageData
+            const response = await this.makeRequest(`${this.backendUrl}/api/ocr`, {
+                method: 'POST',
+                data: {
+                    image_b64: imageData
+                }
             });
+            
+            console.log('OCR response:', response.data);
             
             if (response.data.success) {
                 this.currentText = response.data.text;
+                console.log('Extracted text:', this.currentText);
                 this.displayText(response.data);
                 this.speakText(response.data.text);
                 this.showToast('Text extracted successfully!', 'success');
@@ -203,6 +366,62 @@ class ILuminaRenderer {
             this.showToast(`OCR failed: ${error.message}`, 'error');
         } finally {
             this.hideLoading();
+        }
+    }
+
+    async handleFileUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        if (!this.isBackendReady) {
+            this.showToast('Backend not ready. Please wait...', 'error');
+            return;
+        }
+
+        try {
+            this.showLoading('Processing uploaded image...');
+            
+            // Convert file to base64
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const imageData = e.target.result;
+                await this.processImage(imageData);
+            };
+            reader.readAsDataURL(file);
+            
+        } catch (error) {
+            console.error('File upload error:', error);
+            this.showToast('File upload failed: ' + error.message, 'error');
+        } finally {
+            this.hideLoading();
+        }
+    }
+
+    async processImage(imageData) {
+        try {
+            // Send to backend
+            const response = await this.makeRequest(`${this.backendUrl}/api/ocr`, {
+                method: 'POST',
+                data: {
+                    image_b64: imageData
+                }
+            });
+            
+            console.log('OCR response (file upload):', response.data);
+            
+            if (response.data.success) {
+                this.currentText = response.data.text;
+                console.log('Extracted text (file upload):', this.currentText);
+                this.displayText(response.data);
+                this.speakText(response.data.text);
+                this.showToast('Text extracted successfully!', 'success');
+            } else {
+                throw new Error(response.data.error || 'OCR failed');
+            }
+            
+        } catch (error) {
+            console.error('OCR processing error:', error);
+            this.showToast(`OCR failed: ${error.message}`, 'error');
         }
     }
 
@@ -271,8 +490,11 @@ class ILuminaRenderer {
                     const audioData = reader.result;
                     
                     // Send to backend for speech-to-text
-                    const response = await axios.post(`${this.backendUrl}/stt`, {
-                        audio: audioData
+                    const response = await this.makeRequest(`${this.backendUrl}/api/stt`, {
+                        method: 'POST',
+                        data: {
+                            audio: audioData
+                        }
                     });
                     
                     if (response.data.success) {
@@ -309,8 +531,11 @@ class ILuminaRenderer {
         try {
             this.showLoading('Processing command...');
             
-            const response = await axios.post(`${this.backendUrl}/command`, {
-                text: command
+            const response = await this.makeRequest(`${this.backendUrl}/api/command`, {
+                method: 'POST',
+                data: {
+                    text: command
+                }
             });
             
             if (response.data.success) {
@@ -350,8 +575,11 @@ class ILuminaRenderer {
         }
 
         try {
-            await axios.post(`${this.backendUrl}/tts`, {
-                text: text
+            await this.makeRequest(`${this.backendUrl}/api/command`, {
+                method: 'POST',
+                data: {
+                    text: text
+                }
             });
         } catch (error) {
             console.error('TTS error:', error);
@@ -363,9 +591,32 @@ class ILuminaRenderer {
         const textDisplay = document.getElementById('text-display');
         const metadata = document.getElementById('text-metadata');
         
-        // Display extracted text
-        textDisplay.innerHTML = `<p>${ocrResult.text}</p>`;
-        textDisplay.classList.remove('placeholder');
+        console.log('Displaying OCR result:', ocrResult);
+        console.log('Text display element:', textDisplay);
+        console.log('Metadata element:', metadata);
+        
+        if (!textDisplay) {
+            console.error('Text display element not found!');
+            return;
+        }
+        
+        if (!metadata) {
+            console.error('Metadata element not found!');
+            return;
+        }
+        
+        // Display extracted text with proper formatting
+        if (ocrResult.text) {
+            // Replace newlines with <br> tags and preserve formatting
+            const formattedText = ocrResult.text.replace(/\n/g, '<br>');
+            console.log('Formatted text:', formattedText);
+            textDisplay.innerHTML = `<p>${formattedText}</p>`;
+            textDisplay.classList.remove('placeholder');
+            console.log('Text display innerHTML set to:', textDisplay.innerHTML);
+        } else {
+            textDisplay.innerHTML = '<p class="placeholder">No text detected</p>';
+            console.log('No text detected, showing placeholder');
+        }
         
         // Display metadata
         const inferenceTime = ocrResult.inference_time ? `${ocrResult.inference_time.toFixed(1)}ms` : 'N/A';
@@ -375,6 +626,8 @@ class ILuminaRenderer {
         metadata.innerHTML = `
             <div>Provider: ${provider} | Time: ${inferenceTime} | Confidence: ${confidence}</div>
         `;
+        
+        console.log('Text display completed');
     }
 
     updateUI() {

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text Display Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .text-display { 
+            border: 2px solid #ccc; 
+            padding: 20px; 
+            margin: 20px 0; 
+            min-height: 100px; 
+            background: #f9f9f9;
+        }
+        .placeholder { color: #666; font-style: italic; }
+        button { padding: 10px 20px; margin: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Text Display Test</h1>
+    
+    <button onclick="testDisplay()">Test Display</button>
+    <button onclick="testOCR()">Test OCR</button>
+    
+    <div class="text-display" id="text-display">
+        <p class="placeholder">Text will appear here...</p>
+    </div>
+    
+    <div id="text-metadata">
+        <!-- Metadata will appear here -->
+    </div>
+
+    <script>
+        function testDisplay() {
+            console.log('Testing display...');
+            const testResult = {
+                text: "This is a test text to verify that the display function is working correctly. The text should appear in the Extracted Text section.",
+                confidence: 0.95,
+                success: true
+            };
+            
+            displayText(testResult);
+        }
+        
+        async function testOCR() {
+            try {
+                const response = await fetch('http://127.0.0.1:5005/api/ocr', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image_b64: "data:image/jpeg;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+                    })
+                });
+                
+                const data = await response.json();
+                console.log('OCR response:', data);
+                displayText(data);
+            } catch (error) {
+                console.error('OCR test failed:', error);
+            }
+        }
+        
+        function displayText(ocrResult) {
+            const textDisplay = document.getElementById('text-display');
+            const metadata = document.getElementById('text-metadata');
+            
+            console.log('Displaying OCR result:', ocrResult);
+            console.log('Text display element:', textDisplay);
+            console.log('Metadata element:', metadata);
+            
+            if (!textDisplay) {
+                console.error('Text display element not found!');
+                return;
+            }
+            
+            if (!metadata) {
+                console.error('Metadata element not found!');
+                return;
+            }
+            
+            // Display extracted text with proper formatting
+            if (ocrResult.text) {
+                // Replace newlines with <br> tags and preserve formatting
+                const formattedText = ocrResult.text.replace(/\n/g, '<br>');
+                console.log('Formatted text:', formattedText);
+                textDisplay.innerHTML = `<p>${formattedText}</p>`;
+                textDisplay.classList.remove('placeholder');
+                console.log('Text display innerHTML set to:', textDisplay.innerHTML);
+            } else {
+                textDisplay.innerHTML = '<p class="placeholder">No text detected</p>';
+                console.log('No text detected, showing placeholder');
+            }
+            
+            // Display metadata
+            const inferenceTime = ocrResult.inference_time ? `${ocrResult.inference_time.toFixed(1)}ms` : 'N/A';
+            const provider = ocrResult.npu_used ? 'NPU' : 'CPU';
+            const confidence = ocrResult.confidence ? `${(ocrResult.confidence * 100).toFixed(1)}%` : 'N/A';
+            
+            metadata.innerHTML = `
+                <div>Provider: ${provider} | Time: ${inferenceTime} | Confidence: ${confidence}</div>
+            `;
+            
+            console.log('Text display completed');
+        }
+    </script>
+</body>
+</html>
